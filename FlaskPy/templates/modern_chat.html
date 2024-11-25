@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Chat Platform</title>
+    <style>
+        /* Keep existing styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            height: 100%;
+        }
+        .container {
+            display: flex;
+            height: 100%;
+        }
+        .sidebar {
+            width: 200px;
+            background-color: #f5f5f5;
+            padding: 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding-bottom: 80px;
+            max-width: calc(100% - 200px);
+        }
+        .chat-item, .script-item {
+            margin-bottom: 10px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .chat-item:hover, .script-item:hover {
+            background-color: #e0e0e0;
+        }
+        .message {
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+        }
+        .bot-message {
+            align-self: flex-start;
+            background-color: #f0f0f0;
+        }
+        .bot-message img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .user-input {
+            position: fixed;
+            bottom: 20px;
+            left: 220px;
+            right: 20px;
+            display: flex;
+            background-color: white;
+            padding: 10px;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .user-input input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+        }
+        .user-input button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .script-input {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .script-input input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .script-input button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Chats</h2>
+            <div class="chat-item" onclick="runScript('new_file.py')">new_file.py</div>
+            <h2>Scripts</h2>
+            <div id="script-list">
+                {% for script in scripts %}
+                    {% if script not in ['missing_something.py', 'image_llm.py', 'add_data.py', 'extract_data.py'] %}
+                        <div class="script-item" onclick="runScript('{{ script }}')">{{ script }}</div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        <div class="main-content" id="chat-messages">
+            <!-- Messages will be dynamically added here -->
+        </div>
+    </div>
+    <div class="user-input">
+        <input type="text" id="user-input" placeholder="Type your message here...">
+        <button onclick="sendMessage()">Send</button>
+        <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="uploadAndAnalyzeImage()">
+        <button onclick="document.getElementById('image-upload').click()">Upload and Analyze Image</button>
+    </div>
+
+    <script>
+        let currentScript = null;
+
+        // Helper functions
+        function addMessage(content, isUser) {
+            console.log('Adding message:', content);
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.innerHTML = content.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+            document.getElementById('chat-messages').appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showScriptInputPrompt(scriptName) {
+            console.log('Showing script input prompt for:', scriptName);
+            const inputContainer = document.createElement('div');
+            inputContainer.className = 'script-input';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Enter your input...';
+            
+            const button = document.createElement('button');
+            button.textContent = 'Submit';
+            button.onclick = () => {
+                const userInput = input.value;
+                if (userInput) {
+                    console.log('Sending script input:', userInput);
+                    sendScriptInput(scriptName, userInput);
+                    addMessage(`Input: ${userInput}`, true);
+                    inputContainer.remove();
+                }
+            };
+            
+            inputContainer.appendChild(input);
+            inputContainer.appendChild(button);
+            document.getElementById('chat-messages').appendChild(inputContainer);
+            input.focus();
+        }
+
+        function runScript(scriptName) {
+            console.log('Running script:', scriptName);
+            currentScript = scriptName;
+            if (scriptName === 'new_file.py') {
+                const userPrompt = prompt("Enter the user prompt:");
+                if (userPrompt) {
+                    addMessage(`Running script: ${scriptName}`, false);
+                    fetch(`/run_script/${scriptName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_prompt: userPrompt })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Script response:', data);
+                        handleScriptResponse(data);
+                    })
+                    .catch(error => {
+                        console.error('Error running script:', error);
+                        addMessage(`Error: ${error.message}`, false);
+                    });
+                }
+            } else {
+                fetch(`/run_script/${scriptName}`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Script response:', data);
+                    handleScriptResponse(data);
+                })
+                .catch(error => {
+                    console.error('Error running script:', error);
+                    addMessage(`Error: ${error.message}`, false);
+                });
+            }
+        }
+
+        function handleScriptResponse(data) {
+            if (data.error) {
+                addMessage(`Error: ${data.error}`, false);
+            } else if (data.input_required) {
+                addMessage(data.prompt, false);
+                showScriptInputPrompt(currentScript);
+            } else {
+                addMessage(data.response, false);
+            }
+        }
+
+        function sendScriptInput(scriptName, input) {
+            fetch(`/script_input/${scriptName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: input })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Script input response:', data);
+                handleScriptResponse(data);
+            })
+            .catch(error => {
+                console.error('Error sending script input:', error);
+                addMessage(`Error: ${error.message}`, false);
+            });
+        }
+
+        function sendMessage() {
+            const userInput = document.getElementById('user-input');
+            const message = userInput.value.trim();
+            if (message) {
+                addMessage(message, true);
+                userInput.value = '';
+
+                fetch('/send_message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    addMessage(data.response, false);
+                    if (data.scripts) {
+                        updateScriptList(data.scripts);
+                    }
+                })
+                .catch(error => {
+                    addMessage(`Error: ${error.message}`, false);
+                });
+            }
+        }
+
+        // Keep existing image upload and analysis functions
+        function uploadAndAnalyzeImage() {
+            const fileInput = document.getElementById('image-upload');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select an image first.');
+                return;
+            }
+
+            addMessage(`Image selected: ${file.name}`, true);
+            addMessage('Uploading and analyzing image...', false);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/analyze_image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    addMessage(`Error: ${data.error}`, false);
+                } else {
+                    addMessage(`Image analysis results:`, false);
+                    addMessage(data.results, false);
+                    if (data.image_url) {
+                        const imageMessageDiv = document.createElement('div');
+                        imageMessageDiv.className = 'message bot-message';
+                        
+                        const imgElement = document.createElement('img');
+                        imgElement.src = data.image_url;
+                        imgElement.style.maxWidth = '80%';
+                        imgElement.style.height = 'auto';
+                        
+                        imageMessageDiv.appendChild(imgElement);
+                        document.getElementById('chat-messages').appendChild(imageMessageDiv);
+                    }
+                }
+            })
+            .catch(error => {
+                addMessage(`Error: ${error.message}`, false);
+            })
+            .finally(() => {
+                fileInput.value = '';
+            });
+        }
+
+        // Event listeners
+        document.getElementById('user-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Auto-update script list
+        function updateScriptList() {
+            fetch('/get_scripts')
+                .then(response => response.json())
+                .then(scripts => {
+                    const scriptList = document.getElementById('script-list');
+                    scriptList.innerHTML = '';
+                    scripts.forEach(script => {
+                        if (!['missing_something.py', 'image_llm.py', 'add_data.py', 'extract_data.py'].includes(script)) {
+                            const scriptItem = document.createElement('div');
+                            scriptItem.className = 'script-item';
+                            scriptItem.textContent = script;
+                            scriptItem.onclick = () => runScript(script);
+                            scriptList.appendChild(scriptItem);
+                        }
+                    });
+                });
+        }
+
+        setInterval(updateScriptList, 5000);
+    </script>
+</body>
+</html>
