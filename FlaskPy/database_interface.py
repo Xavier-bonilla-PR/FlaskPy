@@ -1,9 +1,11 @@
 from openai import OpenAI
+import os
+from dotenv import load_dotenv
 
 class DatabaseInterface:
     def __init__(self):
-        # Initialize OpenAI client
-        self.client = OpenAI(api_key='')  # Replace with your actual OpenAI API key
+        load_dotenv()
+        self.client = OpenAI(api_key=os.getenv('AI_KEY'))
         self.conversation_history = [
             {"role": "system", "content": "You are a helpful assistant."}
         ]
