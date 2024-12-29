@@ -166,7 +166,7 @@ def run_script(script_name):
                     try:
                         line = output_queue.get(timeout=0.1)
                         initial_output.append(line)
-                        if '?' in line:  # Check if the line contains a question mark
+                        if '?' or ':' in line:  # Check if the line contains a question mark
                             return jsonify({
                                 'input_required': True,
                                 'prompt': ''.join(initial_output),
